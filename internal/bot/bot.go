@@ -105,5 +105,5 @@ func StartBot(BotToken, yandexAPIKey, catalogID, imageAPIKey string) {
 }
 
 func formatQuote(quote, author string) string {
-	return fmt.Sprintf("«%s»\n\n_%s_", quote, author)
+	return fmt.Sprintf("«%s»\n\n_%s_\n\n[%s](https://t.me/offthepages)", quote, author, "Мысли, сошедшие со страниц")
 }
