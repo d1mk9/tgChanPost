@@ -15,7 +15,7 @@ COPY . .
 RUN ls -R /app
 
 # Собираем приложение
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bot ./cmd/bot 
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o bot ./cmd/bot
 
 # Указываем команду для запуска приложения
 CMD ["./bot"]
