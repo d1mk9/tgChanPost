@@ -3,8 +3,7 @@ package configs
 import (
 	"log"
 	"os"
-
-	"github.com/joho/godotenv"
+	//"github.com/joho/godotenv"
 )
 
 // Config содержит все глобальные конфигурационные параметры
@@ -19,10 +18,10 @@ type Config struct {
 var GlobalConfig Config
 
 func LoadConfig() {
-	err := godotenv.Load()
+	/*err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Ошибка загрузки файла .env")
-	}
+	}*/
 
 	GlobalConfig.BotToken = os.Getenv("TELEGRAM_APITOKEN2")
 	if GlobalConfig.BotToken == "" {
