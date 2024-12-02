@@ -3,7 +3,6 @@ package configs
 import (
 	"log"
 	"os"
-	//"github.com/joho/godotenv"
 )
 
 // Config содержит все глобальные конфигурационные параметры

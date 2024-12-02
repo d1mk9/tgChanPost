@@ -14,6 +14,10 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
+var photoMsg tgbotapi.PhotoConfig
+var formattedQuote string                  // Объявляем переменную для хранения отформатированной цитаты
+var waitingForQuery = make(map[int64]bool) // Хранит состояние ожидания для каждого чата
+
 func StartBot() {
 	bot, err := tgbotapi.NewBotAPI(configs.GlobalConfig.BotToken)
 	if err != nil {
@@ -28,53 +32,100 @@ func StartBot() {
 	updates := bot.GetUpdatesChan(u)
 
 	for update := range updates {
-		if update.Message == nil {
-			continue
+		if update.Message != nil {
+			if err := handleMessage(bot, update.Message); err != nil {
+				log.Printf("Ошибка при обработке сообщения: %v", err)
+			}
+		} else if update.CallbackQuery != nil {
+			if err := handleCallback(bot, update.CallbackQuery); err != nil {
+				log.Printf("Ошибка при обработке callback: %v", err)
+			}
 		}
+	}
+}
 
-		log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
+func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) error {
+	log.Printf("[%s] %s", message.From.UserName, message.Text)
 
-		userQuery := update.Message.Text
+	// Проверяем, ожидаем ли мы новый запрос от пользователя
+	if waitingForQuery[message.Chat.ID] {
+		// Если мы ожидаем новый запрос, генерируем новый ответ
+		userQuery := message.Text
 		response, err := generateResponse(userQuery)
 		if err != nil {
 			log.Printf("Ошибка генерации сообщения: %v", err)
-			continue
+			return err
 		}
 
 		if response.Response == "" {
-			log.Printf("Проверка наличия ответа %d", update.Message.Chat.ID)
-			continue
+			log.Printf("Проверка наличия ответа %d", message.Chat.ID)
+			return nil
 		}
 
 		quote, author, err := utils.ExtractQuoteAndAuthor(response.Response)
 		if err != nil {
-			log.Printf("Ошибка формата ответа %d: %s. Ошибка: %v", update.Message.Chat.ID, response.Response, err)
-			continue
+			log.Printf("Ошибка формата ответа %d: %s. Ошибка: %v", message.Chat.ID, response.Response, err)
+			return err
 		}
 
 		imageFileName, err := generateImage(quote)
 		if err != nil {
-			log.Printf("Ошибка генерации изображения %d: %v", update.Message.Chat.ID, err)
-			continue
+			log.Printf("Ошибка генерации изображения %d: %v", message.Chat.ID, err)
+			return err
 		}
 
-		if err := sendPost(bot, update.Message.Chat.ID, imageFileName, quote, author); err != nil {
+		if err := sendPost(bot, message.Chat.ID, imageFileName, quote, author); err != nil {
 			log.Printf("Ошибка отправки изображения: %v", err)
 		}
 
-		// Сохранение интеракции
-		interaction := models.PromtReq{
-			ChatID:    update.Message.Chat.ID,
-			UserQuery: userQuery,
-			Quote:     quote,
-			Author:    author,
-			Timestamp: time.Now(),
-		}
-
-		if err := utils.SaveInteractionToFile(interaction); err != nil {
-			log.Printf("Ошибка сохранения файла интеракции: %v", err)
-		}
+		// Сброс состояния ожидания
+		delete(waitingForQuery, message.Chat.ID)
+		return nil
 	}
+
+	// Если не ожидаем новый запрос, просто обрабатываем обычное сообщение
+	userQuery := message.Text
+	response, err := generateResponse(userQuery)
+	if err != nil {
+		log.Printf("Ошибка генерации сообщения: %v", err)
+		return err
+	}
+
+	if response.Response == "" {
+		log.Printf("Проверка наличия ответа %d", message.Chat.ID)
+		return nil
+	}
+
+	quote, author, err := utils.ExtractQuoteAndAuthor(response.Response)
+	if err != nil {
+		log.Printf("Ошибка формата ответа %d: %s. Ошибка: %v", message.Chat.ID, response.Response, err)
+		return err
+	}
+
+	imageFileName, err := generateImage(quote)
+	if err != nil {
+		log.Printf("Ошибка генерации изображения %d: %v", message.Chat.ID, err)
+		return err
+	}
+
+	if err := sendPost(bot, message.Chat.ID, imageFileName, quote, author); err != nil {
+		log.Printf("Ошибка отправки изображения: %v", err)
+	}
+
+	// Сохранение интеракции
+	interaction := models.PromtReq{
+		ChatID:    message.Chat.ID,
+		UserQuery: userQuery,
+		Quote:     quote,
+		Author:    author,
+		Timestamp: time.Now(),
+	}
+
+	if err := utils.SaveInteractionToFile(interaction); err != nil {
+		log.Printf(" Ошибка сохранения файла интеракции: %v", err)
+	}
+
+	return nil
 }
 
 func generateResponse(userQuery string) (models.FormattedResponse, error) {
@@ -103,7 +154,7 @@ func generateImage(quote string) (string, error) {
 
 func sendPost(bot *tgbotapi.BotAPI, chatID int64, imageFileName, quote, author string) error {
 	// Форматируем цитату для отправки
-	formattedQuote := fmt.Sprintf("«%s»\n\n_%s_\n\n[%s](https://t.me/offthepages)", quote, author, "Мысли, сошедшие со страниц")
+	formattedQuote = fmt.Sprintf("«%s»\n\n_%s_\n\n[%s](https://t.me/offthepages)", quote, author, "Мысли, сошедшие со страниц")
 	// Открываем файл для отправки
 	file, err := os.Open(imageFileName)
 	if err != nil {
@@ -111,18 +162,62 @@ func sendPost(bot *tgbotapi.BotAPI, chatID int64, imageFileName, quote, author s
 	}
 	defer file.Close()
 
+	keyboardAfterGenerate := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Сгенерировать еще", "genAgain"),
+			tgbotapi.NewInlineKeyboardButtonData("Отправить в канал", "sendCh"),
+		),
+	)
+
 	// Отправка изображения с подписью
-	photoMsg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(imageFileName))
+	photoMsg = tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(imageFileName))
 	photoMsg.ParseMode = "Markdown"
-	photoMsg.Caption = formattedQuote // Устанавливаем отформатированную цитату в качестве подписи
+	photoMsg.Caption = formattedQuote            // Устанавливаем отформатированную цитату в качестве подписи
+	photoMsg.ReplyMarkup = keyboardAfterGenerate // Добавляем кнопки
 
 	if _, err := bot.Send(photoMsg); err != nil {
 		return fmt.Errorf("ошибка отправки изображения: %v", err)
 	}
 
-	msgtoch := tgbotapi.NewPhotoToChannel("@offthepages", photoMsg.File)
-	msgtoch.ParseMode = "Markdown"
-	msgtoch.Caption = formattedQuote // Устанавливаем отформатированную цитату в качестве подписи
-	bot.Send(msgtoch)
+	return nil
+}
+
+func handleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) error {
+	cb := callback.Data
+
+	log.Printf("Получен Callback: %s", cb)
+
+	switch cb {
+	case "genAgain":
+		msg := tgbotapi.NewMessage(callback.Message.Chat.ID, "Пожалуйста, введите запрос для цитаты:")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Ошибка отправки сообщения: %v", err)
+			return err
+		}
+		// Устанавливаем состояние ожидания для текущего чата
+		waitingForQuery[callback.Message.Chat.ID] = true
+	case "sendCh":
+
+		msgtoch := tgbotapi.NewPhotoToChannel("@offthepages", photoMsg.File)
+		msgtoch.ParseMode = "Markdown"
+		msgtoch.Caption = formattedQuote // Устанавливаем отформатированную цитату в качестве подписи
+		if _, err := bot.Send(msgtoch); err != nil {
+			log.Printf("Ошибка отправки изображения в канал: %v", err)
+			return err
+		}
+	}
+
+	// Ответ на callback_query
+	answer := tgbotapi.CallbackConfig{
+		CallbackQueryID: callback.ID,
+		Text:            "Обработка завершена",
+		ShowAlert:       false,
+	}
+
+	if _, err := bot.Request(answer); err != nil {
+		log.Printf("Ошибка ответа на callback_query: %v", err)
+		return err
+	}
+
 	return nil
 }
