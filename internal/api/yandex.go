@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/d1mk9/tgChanPost/internal/models"
@@ -83,15 +84,15 @@ func GenerateMessage(apiKey, catalogID, userMessage string) (models.FormattedRes
 }
 
 // GenerateArtImage генерирует изображение с использованием Yandex Art API
-func GenerateArtImage(apiKey, catalogID, prompt string, seed int) (string, error) {
+func GenerateArtImage(apiKey, catalogID, prompt string, seed int64, wArt, hArt int) (string, error) {
 	// Подготовка запроса
 	requestBody := map[string]interface{}{
 		"modelUri": fmt.Sprintf("art://%s/yandex-art/latest", catalogID),
 		"generationOptions": map[string]interface{}{
 			"seed": seed,
 			"aspectRatio": map[string]string{
-				"widthRatio":  "1",
-				"heightRatio": "1",
+				"widthRatio":  strconv.Itoa(wArt),
+				"heightRatio": strconv.Itoa(hArt),
 			},
 		},
 		"messages": []map[string]interface{}{

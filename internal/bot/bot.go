@@ -3,6 +3,7 @@ package bot
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"time"
 
@@ -138,8 +139,14 @@ func generateResponse(userQuery string) (models.FormattedResponse, error) {
 
 func generateImage(quote string) (string, error) {
 	// Генерация изображения на основе цитаты
-	seed := time.Now().Nanosecond() // Используем текущее время в качестве сид
-	imageFileName, err := api.GenerateArtImage(configs.GlobalConfig.ImageAPIKey, configs.GlobalConfig.CatalogID, quote, seed)
+	seed := time.Now().UnixNano()         // Используем текущее время в качестве сид
+	rng := rand.New(rand.NewSource(seed)) // Создаем новый генератор случайных чисел
+
+	// Генерация случайных значений для wArt и hArt
+	wArt := rng.Intn(10) + 1 // Случайное число от 1 до 10
+	hArt := rng.Intn(10) + 1 // Случайное число от 1 до 10
+
+	imageFileName, err := api.GenerateArtImage(configs.GlobalConfig.ImageAPIKey, configs.GlobalConfig.CatalogID, quote, seed, wArt, hArt)
 	if err != nil {
 		return "", err
 	}
