@@ -97,7 +97,7 @@ func GenerateArtImage(apiKey, catalogID, prompt string, seed int) (string, error
 		"messages": []map[string]interface{}{
 			{
 				"weight": "1",
-				"text":   prompt,
+				"text":   "профессиональное фото, 4k, высокое разрешение, высокая детализация, " + prompt,
 			},
 		},
 	}
