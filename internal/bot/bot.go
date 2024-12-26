@@ -44,6 +44,14 @@ func StartBot() {
 	}
 }
 
+// Функция для отправки сообщения об ошибке пользователю
+func sendErrorMessage(bot *tgbotapi.BotAPI, chatID int64, errorMessage string) {
+	msg := tgbotapi.NewMessage(chatID, errorMessage)
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Ошибка отправки сообщения об ошибке: %v", err)
+	}
+}
+
 func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) error {
 	log.Printf("[%s] %s", message.From.UserName, message.Text)
 
@@ -54,6 +62,7 @@ func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) error {
 		response, err := generateResponse(userQuery)
 		if err != nil {
 			log.Printf("Ошибка генерации сообщения: %v", err)
+			sendErrorMessage(bot, message.Chat.ID, "Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте еще раз.")
 			return err
 		}
 
@@ -65,17 +74,20 @@ func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) error {
 		quote, author, err := utils.ExtractQuoteAndAuthor(response.Response)
 		if err != nil {
 			log.Printf("Ошибка формата ответа %d: %s. Ошибка: %v", message.Chat.ID, response.Response, err)
+			sendErrorMessage(bot, message.Chat.ID, "Произошла ошибка при обработке ответа. Пожалуйста, попробуйте еще раз.")
 			return err
 		}
 
 		imageFileName, err := generateImage(quote)
 		if err != nil {
 			log.Printf("Ошибка генерации изображения %d: %v", message.Chat.ID, err)
+			sendErrorMessage(bot, message.Chat.ID, "Ошибка генерации изображения. Пожалуйста, попробуйте еще раз.")
 			return err
 		}
 
 		if err := sendPost(bot, message.Chat.ID, imageFileName, quote, author); err != nil {
 			log.Printf("Ошибка отправки изображения: %v", err)
+			sendErrorMessage(bot, message.Chat.ID, "Ошибка отправки изображения. Пожалуйста, попробуйте еще раз.")
 		}
 
 		// Сброс состояния ожидания
@@ -88,28 +100,33 @@ func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) error {
 	response, err := generateResponse(userQuery)
 	if err != nil {
 		log.Printf("Ошибка генерации сообщения: %v", err)
+		sendErrorMessage(bot, message.Chat.ID, "Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте еще раз.")
 		return err
 	}
 
 	if response.Response == "" {
 		log.Printf("Проверка наличия ответа %d", message.Chat.ID)
+		sendErrorMessage(bot, message.Chat.ID, "Произошла ошибка при обработке ответа. Пожалуйста, попробуйте еще раз.")
 		return nil
 	}
 
 	quote, author, err := utils.ExtractQuoteAndAuthor(response.Response)
 	if err != nil {
 		log.Printf("Ошибка формата ответа %d: %s. Ошибка: %v", message.Chat.ID, response.Response, err)
+		sendErrorMessage(bot, message.Chat.ID, "Произошла ошибка при обработке ответа. Пожалуйста, попробуйте еще раз.")
 		return err
 	}
 
 	imageFileName, err := generateImage(quote)
 	if err != nil {
 		log.Printf("Ошибка генерации изображения %d: %v", message.Chat.ID, err)
+		sendErrorMessage(bot, message.Chat.ID, "Ошибка генерации изображения. Пожалуйста, попробуйте еще раз.")
 		return err
 	}
 
 	if err := sendPost(bot, message.Chat.ID, imageFileName, quote, author); err != nil {
 		log.Printf("Ошибка отправки изображения: %v", err)
+		sendErrorMessage(bot, message.Chat.ID, "Ошибка отправки изображения. Пожалуйста, попробуйте еще раз.")
 	}
 
 	// Сохранение интеракции
@@ -123,6 +140,7 @@ func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) error {
 
 	if err := utils.SaveInteractionToFile(interaction); err != nil {
 		log.Printf(" Ошибка сохранения файла интеракции: %v", err)
+		sendErrorMessage(bot, message.Chat.ID, "Ошибка сохранения интеракции. Пожалуйста, попробуйте еще раз.")
 	}
 
 	return nil
@@ -197,7 +215,6 @@ func handleCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) erro
 		// Устанавливаем состояние ожидания для текущего чата
 		waitingForQuery[callback.Message.Chat.ID] = true
 	case "sendCh":
-
 		msgtoch := tgbotapi.NewPhotoToChannel("@offthepages", photoMsg.File)
 		msgtoch.ParseMode = "Markdown"
 		msgtoch.Caption = formattedQuote // Устанавливаем отформатированную цитату в качестве подписи
